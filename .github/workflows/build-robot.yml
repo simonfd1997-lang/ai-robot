@@ -1,0 +1,66 @@
+name: Собрать прошивку робота
+
+on:
+  workflow_dispatch:
+    inputs:
+      language:
+        description: "Язык (ru-RU, en-US, es-ES ...)"
+        default: "ru-RU"
+      wake_word:
+        description: "Слово пробуждения (wn9_hiesp = 'Hi ESP', disabled = выкл)"
+        default: "wn9_hiesp"
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:release-v6.1
+    steps:
+      - name: Мои файлы
+        uses: actions/checkout@v4
+        with:
+          path: me
+
+      - name: Исходники Xiaozhi
+        uses: actions/checkout@v4
+        with:
+          repository: 78/xiaozhi-esp32
+          path: fw
+
+      - name: Добавить плату робота
+        shell: bash
+        run: |
+          mkdir -p fw/main/boards/vuitv-robot
+          cp me/board/* fw/main/boards/vuitv-robot/
+          cd fw
+          python3 - <<'PY'
+          k = 'main/Kconfig.projbuild'; s = open(k).read()
+          a = '    config BOARD_TYPE_BREAD_COMPACT_WIFI_LCD'
+          s = s.replace(a, '    config BOARD_TYPE_VUITV_ROBOT\n        bool "VuiTV AI Robot"\n        depends on IDF_TARGET_ESP32S3\n' + a, 1)
+          open(k, 'w').write(s)
+          c = 'main/CMakeLists.txt'; s = open(c).read()
+          b = 'elseif(CONFIG_BOARD_TYPE_BREAD_COMPACT_ML307)'
+          s = s.replace(b, 'elseif(CONFIG_BOARD_TYPE_VUITV_ROBOT)\n    set(BOARD_DIR "vuitv-robot")\n    set(BUILTIN_TEXT_FONT font_noto_sans_basic_14_1)\n    set(BUILTIN_ICON_FONT font_material_symbols_14_1)\n' + b, 1)
+          open(c, 'w').write(s)
+          assert 'VUITV_ROBOT' in open(k).read() and 'vuitv-robot' in open(c).read()
+          PY
+
+      - name: Сборка
+        shell: bash
+        env:
+          LANG_IN: ${{ github.event.inputs.language || 'ru-RU' }}
+          WAKE_IN: ${{ github.event.inputs.wake_word || 'wn9_hiesp' }}
+        run: |
+          cd fw
+          git config --global --add safe.directory "$PWD"
+          source "$IDF_PATH/export.sh"
+          python scripts/build.py vuitv-robot --name vuitv-robot --language "$LANG_IN" --wake-word "$WAKE_IN"
+          cp build/merged-binary.bin ../vuitv-robot-firmware.bin
+
+      - name: Скачать прошивку
+        uses: actions/upload-artifact@v4
+        with:
+          name: vuitv-robot-firmware
+          path: vuitv-robot-firmware.bin
