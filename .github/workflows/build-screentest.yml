@@ -1,0 +1,28 @@
+name: Build screen test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths: [ "screentest/**", ".github/workflows/build-screentest.yml" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:release-v6.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        shell: bash
+        run: |
+          cd screentest
+          source "$IDF_PATH/export.sh"
+          idf.py set-target esp32s3
+          idf.py build
+          idf.py merge-bin
+          cp build/merged-binary.bin ../screentest.bin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screentest
+          path: screentest.bin
