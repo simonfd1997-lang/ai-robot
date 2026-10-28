@@ -1,0 +1,10 @@
+{
+    "type": "karen",
+    "target": "esp32s3",
+    "builds": [
+        {
+            "name": "karen",
+            "sdkconfig_append": []
+        }
+    ]
+}
