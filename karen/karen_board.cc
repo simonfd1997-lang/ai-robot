@@ -20,6 +20,8 @@
 #include <esp_lcd_panel_io.h>
 #include <esp_lcd_panel_ops.h>
 #include <esp_adc/adc_oneshot.h>
+#include <soc/soc.h>
+#include <soc/usb_serial_jtag_reg.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <cmath>
@@ -114,6 +116,9 @@ private:
     }
 
     void InitializeDisplay() {
+        // GPIO19/20 are the USB D-/D+ pads: detach USB-Serial-JTAG so SPI owns them
+        CLEAR_PERI_REG_MASK(USB_SERIAL_JTAG_CONF0_REG, USB_SERIAL_JTAG_USB_PAD_ENABLE);
+        ESP_LOGI(TAG, "Display: CLK=%d MOSI=%d DC=%d mode=%d", DISPLAY_CLK_PIN, DISPLAY_MOSI_PIN, DISPLAY_DC_PIN, DISPLAY_SPI_MODE);
         spi_bus_config_t buscfg = {};
         buscfg.mosi_io_num = DISPLAY_MOSI_PIN;
         buscfg.miso_io_num = GPIO_NUM_NC;
@@ -129,7 +134,7 @@ private:
         io_config.cs_gpio_num = DISPLAY_CS_PIN;
         io_config.dc_gpio_num = DISPLAY_DC_PIN;
         io_config.spi_mode = DISPLAY_SPI_MODE;
-        io_config.pclk_hz = 40 * 1000 * 1000;
+        io_config.pclk_hz = 20 * 1000 * 1000;
         io_config.trans_queue_depth = 10;
         io_config.lcd_cmd_bits = 8;
         io_config.lcd_param_bits = 8;
