@@ -4,7 +4,9 @@
     "builds": [
         {
             "name": "karen",
-            "sdkconfig_append": []
+            "sdkconfig_append": [
+                "CONFIG_ESP_CONSOLE_SECONDARY_NONE=y"
+            ]
         }
     ]
 }
