@@ -11,6 +11,7 @@ on:
         default: "wn9_hiesp"
   push:
     branches: [ main ]
+    paths: [ "board/**" ]
 
 jobs:
   build:
