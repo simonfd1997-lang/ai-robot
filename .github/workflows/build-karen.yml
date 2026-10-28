@@ -1,0 +1,91 @@
+name: Build Karen firmware
+
+on:
+  workflow_dispatch:
+    inputs:
+      wake_word:
+        description: "Wake word: custom:hi karen  or  hiesp"
+        default: "custom:hi karen"
+  push:
+    branches: [ main ]
+    paths: [ "karen/**", ".github/workflows/build-karen.yml" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:release-v6.1
+    steps:
+      - name: My files
+        uses: actions/checkout@v4
+        with:
+          path: me
+
+      - name: Xiaozhi sources
+        uses: actions/checkout@v4
+        with:
+          repository: 78/xiaozhi-esp32
+          path: fw
+
+      - name: Restore build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            fw/build
+            fw/managed_components
+          key: karen-${{ github.run_id }}
+          restore-keys: karen-
+
+      - name: Add Karen board
+        shell: bash
+        run: |
+          mkdir -p fw/main/boards/karen
+          cp me/karen/* fw/main/boards/karen/
+          cd fw
+          python3 - <<'PY'
+          k = 'main/Kconfig.projbuild'; s = open(k).read()
+          a = '    config BOARD_TYPE_BREAD_COMPACT_WIFI_LCD'
+          if 'BOARD_TYPE_KAREN' not in s:
+              s = s.replace(a, '    config BOARD_TYPE_KAREN\n        bool "Karen AI Robot"\n        depends on IDF_TARGET_ESP32S3\n' + a, 1)
+          open(k, 'w').write(s)
+          c = 'main/CMakeLists.txt'; s = open(c).read()
+          b = 'elseif(CONFIG_BOARD_TYPE_BREAD_COMPACT_ML307)'
+          if 'BOARD_TYPE_KAREN' not in s:
+              s = s.replace(b, 'elseif(CONFIG_BOARD_TYPE_KAREN)\n    set(BOARD_DIR "karen")\n    set(BUILTIN_TEXT_FONT font_noto_sans_basic_16_4)\n    set(BUILTIN_ICON_FONT font_material_symbols_16_4)\n' + b, 1)
+          open(c, 'w').write(s)
+          p = 'scripts/build.py'; s = open(p).read()
+          marker = '    """Map a wake-word model to implementation and model Kconfig options."""\n'
+          patch = marker + '''    if wake_word.startswith("custom:"):
+                  phrase = wake_word.split(":", 1)[1].strip().lower()
+                  opts = [
+                      "CONFIG_WAKE_WORD_DISABLED=n", "CONFIG_USE_ESP_WAKE_WORD=n",
+                      "CONFIG_USE_AFE_WAKE_WORD=n", "CONFIG_USE_CUSTOM_WAKE_WORD=y",
+                      f'CONFIG_CUSTOM_WAKE_WORD="{phrase}"',
+                      f'CONFIG_CUSTOM_WAKE_WORD_DISPLAY="{phrase.title()}"',
+                      "CONFIG_CUSTOM_WAKE_WORD_THRESHOLD=20",
+                      "CONFIG_SR_MN_CN_NONE=y", "CONFIG_SR_MN_EN_MULTINET7_QUANT=y",
+                  ]
+                  return "custom", opts, ["CONFIG_USE_CUSTOM_WAKE_WORD", "CONFIG_SR_MN_EN_MULTINET7_QUANT"]
+          '''.replace('\n              ', '\n')
+          assert marker in s
+          s = s.replace(marker, patch, 1)
+          open(p, 'w').write(s)
+          assert 'BOARD_TYPE_KAREN' in open(k).read() and 'karen' in open(c).read()
+          PY
+
+      - name: Build
+        shell: bash
+        env:
+          WAKE_IN: ${{ github.event.inputs.wake_word || 'custom:hi karen' }}
+        run: |
+          cd fw
+          git config --global --add safe.directory "$PWD"
+          source "$IDF_PATH/export.sh"
+          python scripts/build.py karen --name karen --language en-US --wake-word "$WAKE_IN"
+          cp build/merged-binary.bin ../karen-firmware.bin
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: karen-firmware
+          path: karen-firmware.bin
